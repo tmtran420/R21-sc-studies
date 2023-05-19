@@ -1,0 +1,429 @@
+---
+title: "R21 Sterile Immunity Pseudobulk RNA-seq analysis using edgeR Camera pipeline"
+output: html_document
+date: "2023-05-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      root.dir = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/")
+```
+
+## Objective
+
+Perform single cell DGE between conditions for each cell type using pseudobulk method.
+
+References:
+https://bioconductor.org/packages/release/bioc/vignettes/Glimma/inst/doc/single_cell_edger.html
+
+https://www.nature.com/articles/s41467-021-25960-2/figures/1
+
+
+# Load packages
+```{r load packages}
+library(Seurat) 
+#library(SeuratWrappers)
+library(patchwork)
+library(SeuratDisk)
+library(tidyverse)
+library(magrittr)
+library(googledrive)
+library(ggpubr)
+library(scales)
+library(RColorBrewer)
+library(viridis)
+library(scRNAseq)
+library(scran)
+library(Glimma)
+library(edgeR)
+#library(scater) #cannot install this package for some reason
+library(edgeR)
+library(SingleCellExperiment)
+```
+
+### Import refmapped Seurat object from googledrive
+
+```{r import refmapped seurat from gdrve}
+# Import here from Google Drive
+# temp <- tempfile(fileext = ".rds")
+# dl <- drive_download(
+#   as_id("10EKJ-eE2_oouFiHTE5vwMfLF6qVZj_kc"), path = temp, overwrite = TRUE)
+# refmapped_seurat <- readRDS(file = dl$local_path)
+```
+
+```{r import refmapped seurat from local path}
+refmapped_seurat <- readRDS(file = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/data/refmapped_and_dim_red_no_sampling_all15_minusK613_05172023.rds")
+```
+
+
+### subset and extract the cells from a Seurat object
+
+```{r, subset and extract from seurat}
+# Extract raw counts and metadata to create SingleCellExperiment object
+counts <- refmapped_seurat@assays$RNA@counts 
+
+metadata <- refmapped_seurat@meta.data
+
+# Set up metadata as desired for aggregation and DE analysis
+refmapped_seurat <- SetIdent(refmapped_seurat, value = factor(gsub("\\_"," ", refmapped_seurat@meta.data$predicted.celltype.l2)))
+metadata$cluster_id <- factor(refmapped_seurat@active.ident)
+metadata <- metadata %>%
+  dplyr::rename(sample_id = "Sample.ID",
+                class = "batch") %>%
+  mutate(class = factor(tolower(class))) %>%
+  mutate(experiment_mode = factor(gsub(".*a\\_", "", sample_id))) %>%
+  mutate(sample_id = factor(gsub("\\_.*", "", tolower(sample_id))))
+
+# Create single cell experiment object
+sce <- SingleCellExperiment(assays = list(counts = counts), 
+                           colData = metadata)
+
+#change colnames of coldata to more r friendy names
+colnames(colData(sce)) <- gsub("\\.","_",  colnames(colData(sce)))
+
+# Identify groups for aggregation of counts
+groups <- colData(sce)[, c("cluster_id", "sample_id", "predicted_celltype_l2")] #predicted_celltype_l2 is lower level clustering
+```
+
+### Identify highly variable genes for creating MDS plot using OSCA procedure
+
+```{r follow OSCA procedure}
+#uses scuttle, scran
+sce <- scuttle::logNormCounts(sce)
+var_mod <- scran::modelGeneVar(sce)
+hvg_genes <- scran::getTopHVGs(var_mod, n=500)
+hvg_sce <- sce[hvg_genes, ]
+hvg_sce <- logNormCounts(hvg_sce)
+```
+
+### Plot MDS
+
+This takes a long time but gives you an applet that you can look through the different parameters.
+
+```{r plot mds}
+glimmaMDS(
+    logcounts(hvg_sce),
+    groups = colData(hvg_sce)
+)
+```
+
+### acquiring necessary metrics for aggregation across cells in a sample
+
+```{r, acquire metrics}
+# Named vector of cluster names
+kids <- purrr::set_names(levels(sce$cluster_id))
+kids
+
+# Total number of clusters
+nk <- length(kids)
+nk
+
+# Named vector of sample names
+sids <- purrr::set_names(levels(sce$sample_id))
+
+# Total number of samples 
+ns <- length(sids)
+ns
+
+# Generate sample level metadata
+
+## Determine the number of cells per sample
+table(sce$sample_id)
+table(sce$experiment_mode)
+## Turn named vector into a numeric vector of number of cells per sample
+n_cells <- as.numeric(table(sce$sample_id))
+
+## Determine how to reorder the samples (rows) of the metadata to match the order of sample names in sids vector
+m <- match(sids, sce$sample_id)
+
+## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
+ei <- data.frame(colData(sce)[m, ], 
+                  n_cells, row.names = NULL) %>% 
+                select(-"cluster_id")
+ei %>%
+  dplyr::select(class, sample_id, n_cells)
+```
+
+
+
+### Remove low quality genes 
+
+(re-read vignette to important points)
+
+```{r, remove low quality using scater}
+#skip because can't install scater
+# Perform QC if not already performed
+dim(sce)
+
+# Calculate quality control (QC) metrics
+#sce <- calculateQCMetrics(sce)
+
+# Get cells w/ few/many detected genes
+#sce$is_outlier <- isOutlier(
+#        metric = sce$total_features_by_counts,
+#        nmads = 2, type = "both", log = TRUE)
+
+# Remove outlier cells
+#sce <- sce[, !sce$is_outlier]
+```
+
+```{r, remove lowly expressed genes}
+## Remove lowly expressed genes which have less than 10 cells with any counts
+dim(sce)
+sce <- sce[rowSums(counts(sce) > 1) >= 10, ]
+dim(sce)
+```
+
+## Count aggregation to sample level
+
+```{r, count aggregation to sample level}
+# Aggregate the counts per sample_id and cluster_id
+
+# Subset metadata to only include the cluster and sample IDs to aggregate across
+groups <- colData(sce)[, c("cluster_id", "sample_id")]
+
+# Aggregate across cluster-sample groups
+pb <- Matrix.utils::aggregate.Matrix(t(counts(sce)), 
+                       groupings = groups, fun = "sum") 
+
+class(pb)
+
+dim(pb)
+
+pb[1:6, 1:6]
+```
+
+### Split data by cell type
+
+```{r split data by cell type}
+# Not every cluster is present in all samples; create a vector that represents how to split samples
+splitf <- sapply(stringr::str_split(rownames(pb), 
+                                    pattern = "_(?!.*_)",
+                                    n = 2), 
+                 `[`, 1)
+
+# Turn into a list and split the list into components for each cluster and transform, so rows are genes and columns are samples and make rownames as the sample IDs
+pb <- split.data.frame(pb, 
+                       factor(splitf)) %>%
+        lapply(function(u) 
+                set_colnames(t(u), 
+                             stringr::str_extract(rownames(u), "(?<=_)[:alnum:]+")))
+
+class(pb)
+
+# Explore the different components of list
+str(pb)
+```
+
+### Check counts per sample for each cluster
+
+```{r, check counts per sample for each cluster}
+# Print out the table of cells in each cluster-sample group
+options(width = 100)
+table(sce$cluster_id, sce$sample_id)
+colSums(table(sce$cluster_id, sce$sample_id))
+colSums(t(table(sce$cluster_id, sce$sample_id)))
+cell_types_above_200 <- levels(sce$cluster_id)[colSums(t(table(sce$cluster_id, sce$sample_id))) > 200] #limit to cell types with enough cells
+```
+
+## Prepare sample-level metadata for DE anaylsis
+
+```{r, prepare sample level metadata}
+# Get sample names for each of the cell type clusters
+
+# prep. data.frame for plotting
+get_sample_ids <- function(x){
+        pb[[x]] %>%
+                colnames()
+}
+
+de_samples <- map(1:length(kids), get_sample_ids) %>%
+        unlist()
+
+# Get cluster IDs for each of the samples
+
+samples_list <- map(1:length(kids), get_sample_ids)
+
+get_cluster_ids <- function(x){
+        rep(names(pb)[x], 
+            each = length(samples_list[[x]]))
+}
+
+de_cluster_ids <- map(1:length(kids), get_cluster_ids) %>%
+        unlist()
+
+# Create a data frame with the sample IDs, cluster IDs and condition
+gg_df <- data.frame(cluster_id = de_cluster_ids,
+                    sample_id = de_samples)
+
+gg_df <- left_join(gg_df, ei[, c("sample_id", "class")]) 
+
+
+metadata <- gg_df %>%
+        dplyr::select(cluster_id, sample_id, class) 
+        
+metadata 
+```
+
+### Subsetting dataset to cluster(s) of interest
+
+```{r subset to clusters of interest}
+# Generate vector of cluster IDs
+clusters <- levels(factor(metadata$cluster_id))
+clusters
+```
+
+Subset on celltype of interest and run edgeR as a loop
+
+https://bioconductor.org/packages/release/bioc/vignettes/Glimma/inst/doc/single_cell_edger.html
+
+```{r subset on celltype of interest then run DESeq2 all in a loop}
+#read in gene set lists
+hallmark_geneset <- readRDS("MSigDB_Hallmark_v7.4.rds")
+
+toptags_tbl <- pb_camera <- pb_qlf <- pb_qlfit <- pb_lrt <- pb_fit <- contr <- design <- dge_pb <- counts <- cluster_counts <- cluster_metadata <- sapply(cell_types_above_200, function(x) NULL)
+#for(i in cell_types_above_200){
+for(i in cell_types_above_200){
+  cluster_metadata[[i]] <- metadata[which(metadata$cluster_id == i), ]
+  #head(cluster_metadata[[i]] )
+  # Assign the rownames of the metadata to be the sample IDs
+  rownames(cluster_metadata[[i]]) <- cluster_metadata[[i]]$sample_id
+  #head(cluster_metadata[[i]] )
+  # Subset the counts to only the "Mono"
+  counts[[i]] <- pb[[i]]
+  cluster_counts[[i]] <- data.frame(counts[[i]][, which(colnames(counts[[i]]) %in% rownames(cluster_metadata[[i]]))])
+  # Check that all of the row names of the metadata are the same and in the same order as the column names of the counts in order to use as input to DESeq2
+  if(all(rownames(cluster_metadata[[i]]) == colnames(cluster_counts[[i]]))){
+    print(paste0("all good for ", i, "!"))
+  }
+  dge_pb[[i]] <- DGEList(counts = cluster_counts[[i]],
+                      samples = cluster_metadata[[i]],
+                      group = cluster_metadata[[i]]$class)
+  dge_pb[[i]] <- calcNormFactors(dge_pb[[i]])
+  design[[i]] <- model.matrix(~0 + class, data = dge_pb[[i]]$samples)
+  colnames(design[[i]]) <- make.names(gsub("class", "", colnames(design[[i]])))
+  dge_pb[[i]] <- estimateDisp(dge_pb[[i]], design[[i]])
+  contr[[i]] <- makeContrasts(aparasitemic - parasitemic, levels = design[[i]])
+  print(paste0("comparison for ", i, " is ", colnames(contr[[i]])))
+  print(paste0("running glmFit for ", i))
+  pb_fit[[i]] <- glmFit(dge_pb[[i]], design[[i]], robust=TRUE)
+  print(paste0("running glmLRT for ", i))
+  pb_lrt[[i]] <- glmLRT(pb_fit[[i]], contrast = contr[[i]])
+  print(paste0("running glmQLFit for ", i))
+  pb_qlfit[[i]] <- glmQLFit(dge_pb[[i]], design[[i]], robust=TRUE)
+  print(paste0("running glmQLFTest for ", i))
+  pb_qlf[[i]] <- glmQLFTest(pb_qlfit[[i]], contrast = contr[[i]])
+  print(paste0("running CAMERA with Hallmark for ", i))
+  pb_camera[[i]] <- camera(dge_pb[[i]], index = hallmark_geneset, design = design[[i]], contrast = contr[[i]])
+  toptags_tbl[[i]] <- topTags(pb_qlf[[i]], n = nrow(pb_qlf[[i]]))
+}
+```
+
+### Bind all data frames into single dataframe with cell_type column
+
+```{r, de tables}
+toptags_dfs <- toptags_tbl
+for(i in cell_types_above_200){
+  toptags_dfs[[i]] <- toptags_tbl[[i]]$table %>%
+    rownames_to_column(var = "gene_symbol") %>%
+    dplyr::select(gene_symbol, everything())
+}
+
+# Turn the results object into a tibble for use with tidyverse functions
+toptags_tbl_bound <- bind_rows(toptags_dfs, .id = "cell_type")
+
+# Write all results to file
+write.csv(toptags_tbl_bound,
+          paste0("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results/pseudobulk_edgeR_lower_level_celltypes_all_DEG_tables.csv"),
+          quote = FALSE, 
+          row.names = FALSE)
+```
+
+
+## Plot Camera results as bubble plot
+
+```{r, prepare data to plot camera results}
+for(i in cell_types_above_200){
+  pb_camera[[i]] <- pb_camera[[i]] %>%
+    rownames_to_column(var = "pathway") %>%
+    dplyr::select(pathway, everything())
+}
+
+pb_camera_res_bound <- bind_rows(pb_camera, .id = "cell_type") %>%
+  mutate(pathway = gsub("HALLMARK_", "", pathway))
+pb_camera_res_bound_filtered <- pb_camera_res_bound %>%
+  mutate(neglog10pval = -log10(PValue)) %>%
+  arrange(desc(neglog10pval)) %>%
+  filter(FDR < 0.05)
+```
+
+```{r plot hallmark, fig.align='center', fig.height=4.5, fig.width=5.5}
+mycolors = c("Up" = "#F21A00","Down"="#3B9AB2")
+
+plot_hm <- pb_camera_res_bound_filtered %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = Direction)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_manual(values=mycolors) +
+  ggtitle(colnames(contr[[i]])) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+png(filename = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/figures/edger_camera_hallmark_bubble_fdr5.png", units = "in", width = 5.5, height = 4.5, res = 300)
+plot_hm
+dev.off()
+```
+
+```{r, plot kegg, fig.align='center', fig.height=9, fig.width=9}
+plot_kegg <- gsea_res_bound_filtered %>%
+  filter(module_type == "MSigDB_C2_kegg_v7.4") %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
+  ggtitle(mycomparison) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+plot_kegg
+```
+
+```{r, plot go, fig.height=9, fig.width=12}
+plot_go <- gsea_res_bound_filtered %>%
+  filter(module_type == "MSigDB_C5_GO_mf_v7.4") %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
+  ggtitle(mycomparison) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+plot_go
+```
+
+```{r, plot go, fig.height=3, fig.width=4, fig.align='center'}
+plot_biocarta <- gsea_res_bound_filtered %>%
+  filter(module_type == "MSigDB_C2_biocarta_v7.4") %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
+  ggtitle(mycomparison) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+plot_biocarta
+```

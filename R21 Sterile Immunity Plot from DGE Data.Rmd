@@ -1,0 +1,66 @@
+---
+title: "R21 Plot Volcano Plots from DGE data"
+author: "Tuan M. Tran"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(googledrive)
+library(tidyverse)
+library(ggplot2)
+library(EnhancedVolcano)
+```
+
+## Objective
+
+Plot from DGE data
+
+```{r readin data}
+temp <- tempfile(fileext = ".rds")
+dl <- drive_download(
+as_id("10G1B2gjclPK983F8IH9h47qlGXBzZ79D"), path = temp, overwrite = TRUE)
+deglists <- readRDS(file = dl$local_path)
+deglists_vs_all <- deglists$allcelltypes_exvivo_deglists
+deglists["allcelltypes_exvivo_deglists"] <- NULL
+#all_degs <- bind_rows(deglists, .id = "celltype")
+degs_allcelltypes_df <- bind_rows(deglists, .id = "cell_type")
+```
+
+## Make Plots
+
+```{r arrange data then plot, echo=FALSE, fig.align='center', fig.height=8, fig.width=8}
+plot_dat <- degs_allcelltypes_df %>%
+  mutate(cell_type = gsub("\\_d.*", "", .$cell_type)) %>%
+  filter(cell_type == "cd14_mono") %>%
+  mutate(avg_log2FC = -1*avg_log2FC) #multiple by -1 to change from para vs apara to apara vs para (Prasida did contrasts as para vs apara)
+
+myCD14_volcanoplot <- plot_dat %>%
+  EnhancedVolcano(.,
+                  lab = rownames(.),
+                  x = "avg_log2FC",
+                  y = "p_val",
+                  title = 'aparasitemic versus parasitemic, CD14 monocytes',
+                  subtitle = "",
+                  pCutoff = 0.05,
+                  FCcutoff = 0.32192815,
+                  pointSize = 3.0,
+                  labSize = 4.0,
+                  colAlpha = 0.6,
+                  legendLabels=c('Not sig.','Log (base 2) FC','p-value',
+                                 'p-value & Log (base 2) FC'),
+                  legendPosition = 'right',
+                  ylim = c(0,4),
+                  xlim = c(-1,1))
+```
+
+## save plots
+
+```{r save plots}
+png("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Presentations/LIG May 2023/cd14_apara_vs_para_volcano_plot.png",
+    units = "in", width = 9, height = 6.3, res =300)
+myCD14_volcanoplot
+dev.off()
+```
+
