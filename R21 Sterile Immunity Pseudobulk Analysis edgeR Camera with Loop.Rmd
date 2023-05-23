@@ -37,7 +37,6 @@ library(scran)
 library(Glimma)
 library(edgeR)
 #library(scater) #cannot install this package for some reason
-library(edgeR)
 library(SingleCellExperiment)
 ```
 
@@ -168,9 +167,9 @@ dim(sce)
 ```
 
 ```{r, remove lowly expressed genes}
-## Remove lowly expressed genes which have less than 10 cells with any counts
+## Remove lowly expressed genes which have less than 20 cells with any counts
 dim(sce)
-sce <- sce[rowSums(counts(sce) > 1) >= 10, ]
+sce <- sce[rowSums(counts(sce) > 1) >= 20, ]
 dim(sce)
 ```
 
@@ -280,6 +279,8 @@ https://bioconductor.org/packages/release/bioc/vignettes/Glimma/inst/doc/single_
 ```{r subset on celltype of interest then run DESeq2 all in a loop}
 #read in gene set lists
 hallmark_geneset <- readRDS("MSigDB_Hallmark_v7.4.rds")
+c2_kegg_geneset <- readRDS("MSigDB_C2_kegg_v7.4.rds")
+c5_GO_geneset <- readRDS("MSigDB_C5_GO_mf_v7.4.rds")
 
 toptags_tbl <- pb_camera <- pb_qlf <- pb_qlfit <- pb_lrt <- pb_fit <- contr <- design <- dge_pb <- counts <- cluster_counts <- cluster_metadata <- sapply(cell_types_above_200, function(x) NULL)
 #for(i in cell_types_above_200){
@@ -313,8 +314,9 @@ for(i in cell_types_above_200){
   pb_qlfit[[i]] <- glmQLFit(dge_pb[[i]], design[[i]], robust=TRUE)
   print(paste0("running glmQLFTest for ", i))
   pb_qlf[[i]] <- glmQLFTest(pb_qlfit[[i]], contrast = contr[[i]])
-  print(paste0("running CAMERA with Hallmark for ", i))
-  pb_camera[[i]] <- camera(dge_pb[[i]], index = hallmark_geneset, design = design[[i]], contrast = contr[[i]])
+  print(paste0("running CAMERA with ", deparse(substitute(c5_GO_geneset)) ," for ", i))
+  #pb_camera[[i]] <- camera(dge_pb[[i]], index = hallmark_geneset, design = design[[i]], contrast = contr[[i]]) #hallmark
+  pb_camera[[i]] <- camera(dge_pb[[i]], index = c5_GO_geneset, design = design[[i]], contrast = contr[[i]]) #kegg
   toptags_tbl[[i]] <- topTags(pb_qlf[[i]], n = nrow(pb_qlf[[i]]))
 }
 ```
@@ -343,6 +345,8 @@ write.csv(toptags_tbl_bound,
 ## Plot Camera results as bubble plot
 
 ```{r, prepare data to plot camera results}
+# toptags_tbl_bound <- read_csv("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results/pseudobulk_edgeR_lower_level_celltypes_all_DEG_tables.csv")
+
 for(i in cell_types_above_200){
   pb_camera[[i]] <- pb_camera[[i]] %>%
     rownames_to_column(var = "pathway") %>%
@@ -350,11 +354,27 @@ for(i in cell_types_above_200){
 }
 
 pb_camera_res_bound <- bind_rows(pb_camera, .id = "cell_type") %>%
-  mutate(pathway = gsub("HALLMARK_", "", pathway))
+  mutate(pathway = sub(".+?\\_", "", pathway))
+
+# Write all results to file
+# write.csv(pb_camera_res_bound,
+#           paste0("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results/pseudobulk_edgeR_lower_level_celltypes_all_CAMERA_Hallmark_res_tabs.csv"),
+#           quote = FALSE, 
+#           row.names = FALSE)
+
+#Write camera results to file (note have to specific module type in filename)
+write.csv(pb_camera_res_bound,
+          paste0("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results/pseudobulk_edgeR_lower_level_celltypes_all_CAMERA_GO_res_tabs.csv"),
+          quote = FALSE,
+          row.names = FALSE)
+
+
 pb_camera_res_bound_filtered <- pb_camera_res_bound %>%
   mutate(neglog10pval = -log10(PValue)) %>%
   arrange(desc(neglog10pval)) %>%
   filter(FDR < 0.05)
+
+
 ```
 
 ```{r plot hallmark, fig.align='center', fig.height=4.5, fig.width=5.5}
@@ -370,45 +390,74 @@ plot_hm <- pb_camera_res_bound_filtered %>%
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.major.y = element_line( linewidth=.1, color="grey"),
         # explicitly set the horizontal lines (or they will disappear too)
-        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"),
+        plot.margin = margin(t = 1,  # Top margin
+                             r = 0.2,  # Right margin
+                             b = 0.2,  # Bottom margin
+                             l = 1.5,  # Left margin
+                             unit = "cm")) +
+  scale_x_discrete(limits = rev) +
+  coord_flip()
 
-png(filename = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/figures/edger_camera_hallmark_bubble_fdr5.png", units = "in", width = 5.5, height = 4.5, res = 300)
+png(filename = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/figures/edger_camera_hallmark_bubble_fdr5_coord_flip.png", units = "in", width = 5.5, height = 4, res = 300)
 plot_hm
 dev.off()
 ```
 
 ```{r, plot kegg, fig.align='center', fig.height=9, fig.width=9}
-plot_kegg <- gsea_res_bound_filtered %>%
-  filter(module_type == "MSigDB_C2_kegg_v7.4") %>%
-  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+plot_kegg <- pb_camera_res_bound %>%
+  filter(FDR < 0.10) %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = Direction)) +
   geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
-  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
-  ggtitle(mycomparison) +
+  scale_color_manual(values=mycolors) +
+  ggtitle(colnames(contr[[i]])) +
   theme_linedraw() + 
   theme(axis.title = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.major.y = element_line( linewidth=.1, color="grey"),
         # explicitly set the horizontal lines (or they will disappear too)
-        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"),
+        plot.margin = margin(t = 1,  # Top margin
+                             r = 0.2,  # Right margin
+                             b = 0.2,  # Bottom margin
+                             l = 3.5,  # Left margin
+                             unit = "cm")) +
+  scale_x_discrete(limits = rev) +
+  coord_flip()
 
 plot_kegg
+
+png(filename = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/figures/edger_camera_kegg_bubble_fdr5_coord_flip.png", units = "in", width = 17, height = 5, res = 300)
+plot_kegg
+dev.off()
 ```
 
-```{r, plot go, fig.height=9, fig.width=12}
-plot_go <- gsea_res_bound_filtered %>%
-  filter(module_type == "MSigDB_C5_GO_mf_v7.4") %>%
-  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+```{r, plot go, fig.align='center', fig.height=9, fig.width=9}
+plot_go <- pb_camera_res_bound %>%
+  filter(FDR < 0.10) %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = Direction)) +
   geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
-  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
-  ggtitle(mycomparison) +
+  scale_color_manual(values=mycolors) +
+  ggtitle(colnames(contr[[i]])) +
   theme_linedraw() + 
   theme(axis.title = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.major.y = element_line( linewidth=.1, color="grey"),
         # explicitly set the horizontal lines (or they will disappear too)
-        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"),
+        plot.margin = margin(t = 1,  # Top margin
+                             r = 0.2,  # Right margin
+                             b = 0.2,  # Bottom margin
+                             l = 3.5,  # Left margin
+                             unit = "cm")) +
+  scale_x_discrete(limits = rev) +
+  coord_flip()
 
+plot_kegg
+
+png(filename = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/figures/edger_camera_GO_bubble_fdr5_coord_flip.png", units = "in", width = 17, height = 10, res = 300)
 plot_go
+dev.off()
 ```
 
 ```{r, plot go, fig.height=3, fig.width=4, fig.align='center'}

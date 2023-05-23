@@ -1,5 +1,5 @@
 ---
-title: "R21 Sterile Immunity Pseudobulk RNA-seq analysis"
+title: "R21 Sterile Immunity Pseudobulk RNA-seq analysis using DESeq2 GSEA pipeline"
 output: html_document
 date: "2023-05-15"
 ---
@@ -39,6 +39,7 @@ library(Matrix.utils)
 library(apeglm)
 #library(scater) #cannot install this package for some reason
 library(DESeq2)
+library(fgsea)
 ```
 
 ### Import refmapped Seurat object from googledrive
@@ -317,4 +318,113 @@ write.csv(res_tbl_bound,
           paste0("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results/pseudobulk_DESeq2_lower_level_celltypes_all_DEG_tables.csv"),
           quote = FALSE, 
           row.names = FALSE)
+```
+
+### Apply fgsea
+
+```{r apply fgsea}
+#read in from file
+res_tbl_bound <- read.csv("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results/pseudobulk_DESeq2_lower_level_celltypes_all_DEG_tables.csv")
+
+#revert to named list of DFs using tidytable::group_split (https://github.com/markfairbanks/tidytable/blob/main/R/group_split.R)
+res_tbl_list <- res_tbl_bound %>%
+  dplyr::select(cell_type, gene, ranking_metric) %>%
+  tidytable::group_split(cell_type, .keep = FALSE, .named = TRUE)  %>%
+  lapply(., deframe)
+
+devtools::source_url("https://github.com/TranLab/ModuleLists/blob/main/NamedGeneRankList2GseaTable.R?raw=TRUE")
+# Github link: https://github.com/TranLab/ModuleLists/blob/main/NamedGeneRankList2GseaTable.R
+
+gsea_res <- sapply(names(res_tbl_list), function(x) NULL)
+
+for(i in names(res_tbl_list)){
+  gsea_res[[i]] <- NamedGeneRankList2GseaTable(res_tbl_list[[i]], geneset = c("MSigDB"),
+                                          output_directory = "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results",
+                                          filename_prefix = "scrnaseq_gsea_no_sampling_l2", fixed_seed = TRUE)
+}
+
+#remove NULL elements in list
+gsea_res[sapply(gsea_res, is.null)] <- NULL
+
+write_rds(gsea_res, "/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Manuscripts/Kalifabougou Sterile Immunity Manuscript/R21-sc-studies/DE_analysis_scrnaseq/results/DESe2_fgsea_MSigDB_res_tabs.rds")
+```
+
+## Plot GSEA results as bubble plot
+
+```{r, prepare data to plot gsea results}
+gsea_res_bound <- bind_rows(gsea_res, .id = "cell_type")
+
+gsea_res_bound_filtered <- gsea_res_bound %>%
+  filter(padj < 0.01) %>%
+  dplyr::rename(FDR = padj)
+
+mycomparison <- unique(res_tbl_bound$comparison)
+```
+
+```{r plot hallmark, fig.align='center', fig.height=6, fig.width=7}
+plot_hm <- gsea_res_bound_filtered %>%
+  filter(module_type == "MSigDB_Hallmark_v7.4") %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
+  ggtitle(mycomparison) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+plot_hm
+```
+
+```{r, plot kegg, fig.align='center', fig.height=9, fig.width=9}
+plot_kegg <- gsea_res_bound_filtered %>%
+  filter(module_type == "MSigDB_C2_kegg_v7.4") %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
+  ggtitle(mycomparison) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+plot_kegg
+```
+
+```{r, plot go, fig.height=9, fig.width=12}
+plot_go <- gsea_res_bound_filtered %>%
+  filter(module_type == "MSigDB_C5_GO_mf_v7.4") %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
+  ggtitle(mycomparison) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+plot_go
+```
+
+```{r, plot go, fig.height=3, fig.width=4, fig.align='center'}
+plot_biocarta <- gsea_res_bound_filtered %>%
+  filter(module_type == "MSigDB_C2_biocarta_v7.4") %>%
+  ggplot(., aes(y = pathway, x = cell_type, color = NES)) +
+  geom_point(aes(size = -log10(FDR)), alpha = 1.0) +
+  scale_color_gradient2(low = "#3B9AB2", mid = "white", high = "#F21A00") +
+  ggtitle(mycomparison) +
+  theme_linedraw() + 
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.y = element_line( linewidth=.1, color="grey"),
+        # explicitly set the horizontal lines (or they will disappear too)
+        panel.grid.major.x = element_line( linewidth=.1, color="grey"))
+
+plot_biocarta
 ```

@@ -1,0 +1,1088 @@
+---
+title: "R21 Sterile Immunity combined all15_samples_uMAP plots_cellfrequencies_GSEA_bubbleplots"
+author: "Prasida Holla"
+date: "2023-04-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Objective: 
+1. Import refapped object from all 15 integrated apara and para objects
+2. plot ref.umpa plots to show cell type distribution
+3. group cell types by batch and Sample.IDs, plot celltype frequency boxplots
+4. Import GSEA results
+  - Trim top n most significant pathways, plot bubble plots
+  - Plot all Hallmark and all KEGG pathways
+  -Plot top significant C5s that a re relevant (select filtering criteria bsed on pathway type)
+
+# Load packages
+```{r load packages}
+library(Seurat) 
+library(patchwork)
+library(SeuratDisk)
+library(tidyverse)
+library(googledrive)
+library(ggpubr)
+library(scales)
+library(RColorBrewer)
+library(viridis)
+#library(SeuratWrappers)
+```
+#Import the refmapped object
+```{r}
+# Import here from Google Drive
+temp <- tempfile(fileext = ".rds")
+dl <- drive_download(
+  as_id("10EKJ-eE2_oouFiHTE5vwMfLF6qVZj_kc"), path = temp, overwrite = TRUE)
+refmapped.all<- readRDS(file = dl$local_path)
+```
+
+# Separate by batch
+```{r Separate by batch}
+all.split<-SplitObject(refmapped.all, split.by = "batch")
+all_para<-all.split$Parasitemic
+all_apara<-all.split$Aparasitemic
+```
+
+#Plot uMAPs with reference based cell type annotations
+```{r Plot uMAPs with reference based cell type annotations}
+#Apara
+#Low res cell type annotation
+aparasitemic_lores = DimPlot(all_apara, reduction = "ref.umap", 
+             group.by = "predicted.celltype.l1", 
+             label = TRUE, 
+             label.size = 4, 
+             repel = TRUE,
+             pt.size = 0.1) +
+  NoLegend() +
+  ggtitle("aparasitemic (n=7)")+
+   theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none")+
+  grids(linetype = "dashed")
+
+#High res cell type annotation
+aparasitemic_hires = DimPlot(all_apara, reduction = "ref.umap", 
+             group.by = "predicted.celltype.l2", 
+             label = TRUE, 
+             label.size = 3, 
+             repel = TRUE,
+             pt.size = 0.07) +
+  NoLegend() +
+  ggtitle("aparasitemic (n=7)")+
+     theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none")+
+  grids(linetype = "dashed")
+
+#Para
+#Low res cell type annotation
+parasitemic_lores = DimPlot(all_para, reduction = "ref.umap", 
+             group.by = "predicted.celltype.l1", 
+             label = TRUE, 
+             label.size = 4, 
+             repel = TRUE,
+             pt.size = 0.1) +
+  NoLegend() +
+  ggtitle("parasitemic (n=8)")+
+   theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none")+
+  grids(linetype = "dashed")
+
+#High res cell type annotation
+parasitemic_hires = DimPlot(all_para, reduction = "ref.umap", 
+             group.by = "predicted.celltype.l2", 
+             label = TRUE, 
+             label.size = 3, 
+             repel = TRUE,
+             pt.size = 0.07) +
+  NoLegend() +
+  ggtitle("parasitemic (n=8)")+
+     theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none")+
+  grids(linetype = "dashed")
+```
+
+```{r output umap to PDF}
+pdf("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Presentations/LIG May 2023/parasitemic_aparasitemic_hires_umap_042023.pdf", height=4.5, width=9)
+ggarrange(aparasitemic_hires, parasitemic_hires, nrow = 1)
+dev.off()
+
+png("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Presentations/LIG May 2023/parasitemic_aparasitemic_hires_umap_042023.png", height=4.5, width=9,
+    units = "in", res = 300)
+ggarrange(aparasitemic_hires, parasitemic_hires, nrow = 1)
+dev.off()
+
+png("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Presentations/LIG May 2023/parasitemic_aparasitemic_hires_umap_042023_nrow2.png", height=9, width=4.5,
+    units = "in", res = 300)
+ggarrange(aparasitemic_hires, parasitemic_hires, nrow = 2)
+dev.off()
+
+png("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Presentations/LIG May 2023/parasitemic_aparasitemic_lores_umap_042023_nrow2.png", height=9, width=4.5,
+    units = "in", res = 300)
+ggarrange(aparasitemic_lores, parasitemic_lores, nrow = 2)
+dev.off()
+```
+
+#ADT validation
+```{r ADT validation}
+# Approach 1: Looking at the expression of key lineage markers in GEX and ADT
+
+# Apara
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_uMAP_Apara_ADTValidation_04272023.pdf", height=4.5, width=12)
+DefaultAssay(all_apara) <- "Protein"
+p5<-FeaturePlot(all_apara, features = c("CD19.1", 
+                                                       "CD3", 
+                                                       "CD4.1", 
+                                                       "CD8a", 
+                                                       "CD14.1", 
+                                                       "CD16", 
+                                                       "CD56-NCAM"),
+                reduction = "ref.umap", cols = c("lightgrey", "darkgreen"), min.cutoff = "q45", max.cutoff = "q95", ncol = 7, label = T, label.size = 4, 
+             repel = TRUE,
+             pt.size = 0.1) &
+  NoLegend() &
+     theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+dev.off()
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_uMAP_Apara_RNAValidation_04272023.pdf", height=4.5, width=12)
+DefaultAssay(all_apara) <- "RNA"
+p6<-FeaturePlot(all_apara, features = c("CD19", 
+                                        "CD3E", 
+                                        "CD4", 
+                                        "CD8A", 
+                                        "CD14", 
+                                        "FCGR3A", 
+                                        "NCAM1"),    
+                reduction = "ref.umap", min.cutoff = "q45", max.cutoff = "q95", ncol = 7, label = T, label.size = 4, 
+             repel = TRUE,
+             pt.size = 0.1) &
+  NoLegend() &
+     theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+# Para
+DefaultAssay(all_para) <- "Protein"
+p7<-FeaturePlot(all_para, features = c("CD19.1", 
+                                                       "CD3", 
+                                                       "CD4.1", 
+                                                       "CD8a", 
+                                                       "CD14.1", 
+                                                       "CD16", 
+                                                       "CD56-NCAM"),
+                reduction = "ref.umap", cols = c("lightgrey", "darkgreen"), min.cutoff = "q45", max.cutoff = "q95", ncol = 7, label = T, label.size = 4, 
+             repel = TRUE,
+             pt.size = 0.1) &
+  NoLegend() &
+     theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+DefaultAssay(all_para) <- "RNA"
+p8<-FeaturePlot(all_para, features = c("CD19", 
+                                        "CD3E", 
+                                        "CD4", 
+                                        "CD8A", 
+                                        "CD14", 
+                                        "FCGR3A", 
+                                        "NCAM1"),    
+                reduction = "ref.umap", min.cutoff = "q45", max.cutoff = "q95", ncol = 7, label = T, label.size = 4, 
+             repel = TRUE,
+             pt.size = 0.1) &
+  NoLegend() &
+     theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+```
+
+#Plot celltype frequencies
+
+```{r arrange data to plot celltype frequencies}
+######
+# Extract metadata from total object
+all_metadat<-refmapped.all@meta.data
+
+
+# For Predicted Celltype L1
+all.cf_citeseq_celltype1<-all_metadat%>%
+     group_by(Sample.ID, batch, predicted.celltype.l1) %>%
+     summarise(n = n()) %>%
+     mutate(freq = 100*(n / sum(n)))%>%
+  mutate(Sample.ID = if_else(grepl("Kali0631_Para_Multiome", Sample.ID),"Kali0600_Para_Multiome",Sample.ID))%>%
+  mutate(Sample.ID = if_else(grepl("Kali0585_Para_Multiome", Sample.ID),"Kali0593_Para_Multiome",Sample.ID)) #Last two mutations are to correct sample annotations for Kali0593 aand Kali0600
+
+# For Predicted Celltype L2
+all.cf_citeseq_celltype2<-all_metadat %>%
+     group_by(Sample.ID, batch, predicted.celltype.l2) %>%
+     summarise(n = n()) %>%
+     mutate(freq = 100*(n / sum(n)))%>%
+  mutate(Sample.ID = if_else(grepl("Kali0631_Para_Multiome", Sample.ID),"Kali0600_Para_Multiome",Sample.ID))%>%
+  mutate(Sample.ID = if_else(grepl("Kali0585_Para_Multiome", Sample.ID),"Kali0593_Para_Multiome",Sample.ID)) #Last two 
+
+# For plotting
+basefont <- "sans"
+basefontsize <- 14
+pvalfontsize <- 6
+symnum.args <- list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns"))
+gs.pal <- colorRampPalette(c("blue","red"),bias=.1,space="rgb")
+
+
+# Statistics on these frequencies
+# Remove the celltypes that are not represented in all samples 
+#Low resolution celltypes represented in both batches (apara, para)
+l1_counts<-all.cf_citeseq_celltype1 %>%
+    group_by(predicted.celltype.l1, batch) %>%
+    summarise(n = n())
+
+#High resolution celltypes represented in both batches (apara, para)
+l2_counts<-all.cf_citeseq_celltype2 %>%
+    group_by(predicted.celltype.l2, batch) %>%
+    summarise(n = n())
+
+library(Hmisc)
+all.cf_citeseq_celltype2<-subset(all.cf_citeseq_celltype2, predicted.celltype.l2 %nin% c("ASDC", "CD8 Proliferating"))
+
+
+ # Adjust for pairwise
+ my_comparisons <- list(c("Kali0666_Apara_Citeseq", "Kali0650_Para_Citeseq"), 
+                          c("Kali0647_Apara_Multiome", "Kali0651_Para_Multiome"), 
+                          #c("Kali0613_Apara_Multiome", "Kali0612_Para_Multiome"), 
+                          c("Kali0618_Apara_Citeseq", "Kali0628_Para_Citeseq"), 
+                          c("Kali0631_Apara_Multiome", "Kali0600_Para_Multiome"), 
+                          c("Kali0626_Apara_Citeseq", "Kali0640_Para_Citeseq"), 
+                          c("Kali0636_Apara_Citeseq", "Kali0604_Para_Citeseq"), 
+                          c("Kali0585_Apara_Multiome", "Kali0593_Para_Multiome")) 
+ 
+  stat.test_l1_freq <- all.cf_citeseq_celltype1 %>%
+  group_by(predicted.celltype.l1)%>%
+  rstatix::wilcox_test(., freq ~batch, comparisons = my_comparisons)%>%
+   rstatix::adjust_pvalue(., p.col = NULL, output.col = NULL, method = "BH")
+
+  stat.test_l2_freq <- all.cf_citeseq_celltype2 %>%
+  group_by(predicted.celltype.l2)%>%
+  rstatix::wilcox_test(., freq ~batch, comparisons = my_comparisons)%>%
+   rstatix::adjust_pvalue(., p.col = NULL, output.col = NULL, method = "BH")
+```
+
+
+```{r plot celltype frequencies}
+my_cell_freq_plot <- all.cf_citeseq_celltype1 %>%
+  mutate(batch = tolower(batch)) %>%
+  ggplot(., aes(x=factor(batch), y=freq, fill = batch, color = batch)) +
+  ggbeeswarm::geom_beeswarm(priority='density',size=2.5) +
+  geom_boxplot(alpha = 0.4, color = "grey30", outlier.shape = NA) +
+  stat_compare_means(label = "p", comparisons = list(c("aparasitemic", "parasitemic")), method = "wilcox.test", vjust = 1, symnum.args = symnum.args) +
+  scale_fill_manual(values = c("#6B8C83", "#B76369")) +
+  scale_color_manual(values = c("#6B8C83", "#B76369")) +
+  ylab("percent of total") +
+  xlab("") +
+  facet_wrap(~predicted.celltype.l1, scales = "free_y") +
+  theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"))+
+  grids(linetype = "dashed")
+
+
+pdf("/Users/tuantran/Library/CloudStorage/OneDrive-IndianaUniversity/Presentations/LIG May 2023/All15samples_Exvivo_Cell frequencies l1_with stats 04262023.pdf", height=9, width=8)
+
+dev.off()
+
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15_samples_Exvivo_Cell frequencies l2_with stats 04262023.pdf", height=15, width=14)
+ggplot(all.cf_citeseq_celltype2, aes(x=factor(batch), y=freq, fill = batch, color = Sample.ID)) +
+geom_point(position = position_jitterdodge()) +
+geom_boxplot(alpha = 0.4, color = "grey30", outlier.shape = NA) +
+stat_compare_means(label = "p", comparisons = list(c("Aparasitemic", "Parasitemic")), method = "wilcox.test", vjust = 1, symnum.args = symnum.args) +
+scale_fill_manual(values = c("#6B8C83", "#B76369")) +
+scale_color_manual(breaks = c("Kali0666_Apara_Citeseq", 
+                              "Kali0650_Para_Citeseq", 
+                            "Kali0647_Apara_Multiome", 
+                            "Kali0651_Para_Multiome", 
+                            #"Kali0613_Apara_Multiome", 
+                            "Kali0612_Para_Multiome", 
+                            "Kali0618_Apara_Citeseq", 
+                            "Kali0628_Para_Citeseq", 
+                            "Kali0631_Apara_Multiome", 
+                            "Kali0600_Para_Multiome", 
+                            "Kali0626_Apara_Citeseq", 
+                            "Kali0640_Para_Citeseq", 
+                            "Kali0636_Apara_Citeseq",
+                            "Kali0604_Para_Citeseq", 
+                            "Kali0585_Apara_Multiome", 
+                            "Kali0593_Para_Multiome"), values=gs.pal(15)) +
+ylab("Percentage of total") +
+facet_wrap(~predicted.celltype.l2, scales = "free") +
+theme(axis.text.y = element_text(size=14),
+axis.text.x = element_text(size=14),
+axis.title.y  = element_text(size=14),
+axis.title.x  = element_text(size=14),
+panel.background = element_blank(),
+panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(),
+panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"))+
+grids(linetype = "dashed")
+dev.off()
+
+# as bicolor beeswarm plots
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_Cell frequencies beeswarm l1_with stats 04262023.pdf", height=9, width=8)
+ggplot(all.cf_citeseq_celltype1, aes(x=factor(batch), y=freq, fill = batch, color = Sample.ID)) +
+geom_beeswarm() +
+geom_boxplot(alpha = 0.4, color = "grey30", outlier.shape = NA) +
+stat_compare_means(label = "p", comparisons = list(c("Aparasitemic", "Parasitemic")), method = "wilcox.test", vjust = 1, symnum.args = symnum.args) +
+scale_fill_manual(values = c("#6B8C83", "#B76369")) +
+scale_color_manual(breaks = c("Kali0666_Apara_Citeseq", 
+                            "Kali0647_Apara_Multiome", 
+                            "Kali0618_Apara_Citeseq",
+                            "Kali0631_Apara_Multiome", 
+                           #"Kali0613_Apara_Multiome",
+                              "Kali0626_Apara_Citeseq", 
+                            "Kali0636_Apara_Citeseq",
+                            "Kali0585_Apara_Multiome", 
+                            "Kali0650_Para_Citeseq", 
+                            "Kali0651_Para_Multiome", 
+                            "Kali0612_Para_Multiome", 
+                            "Kali0628_Para_Citeseq", 
+                            "Kali0600_Para_Multiome", 
+                            "Kali0640_Para_Citeseq", 
+                            "Kali0604_Para_Citeseq", 
+                            "Kali0593_Para_Multiome"), values=c("#202a27", 
+                                                                "#202a27",
+                                                                "#202a27", 
+                                                                "#202a27",
+                                                                "#202a27", 
+                                                                "#202a27",
+                                                                "#202a27", 
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413")) +
+ylab("Percentage of total") +
+facet_wrap(~predicted.celltype.l1, scales = "free") +
+theme(axis.text.y = element_text(size=14),
+axis.text.x = element_text(size=14),
+axis.title.y  = element_text(size=14),
+axis.title.x  = element_text(size=14),
+panel.background = element_blank(),
+panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(),
+panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"))+
+grids(linetype = "dashed")
+dev.off()
+
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15_samples_Exvivo_Cell frequencies beeswarm l2_with stats 04262023.pdf", height=15, width=14)
+ggplot(all.cf_citeseq_celltype2, aes(x=factor(batch), y=freq, fill = batch, color = Sample.ID)) +
+geom_beeswarm() +
+geom_boxplot(alpha = 0.4, color = "grey30", outlier.shape = NA) +
+stat_compare_means(label = "p", comparisons = list(c("Aparasitemic", "Parasitemic")), method = "wilcox.test", vjust = 1, symnum.args = symnum.args) +
+scale_fill_manual(values = c("#6B8C83", "#B76369")) +
+scale_color_manual(breaks = c("Kali0666_Apara_Citeseq", 
+                            "Kali0647_Apara_Multiome", 
+                            "Kali0618_Apara_Citeseq",
+                            "Kali0631_Apara_Multiome", 
+                           #"Kali0613_Apara_Multiome",
+                              "Kali0626_Apara_Citeseq", 
+                            "Kali0636_Apara_Citeseq",
+                            "Kali0585_Apara_Multiome", 
+                            "Kali0650_Para_Citeseq", 
+                            "Kali0651_Para_Multiome", 
+                            "Kali0612_Para_Multiome", 
+                            "Kali0628_Para_Citeseq", 
+                            "Kali0600_Para_Multiome", 
+                            "Kali0640_Para_Citeseq", 
+                            "Kali0604_Para_Citeseq", 
+                            "Kali0593_Para_Multiome"), values=c("#202a27", 
+                                                                "#202a27",
+                                                                "#202a27", 
+                                                                "#202a27",
+                                                                "#202a27", 
+                                                                "#202a27",
+                                                                "#202a27", 
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413",
+                                                                "#421413")) +
+ylab("Percentage of total") +
+facet_wrap(~predicted.celltype.l2, scales = "free") +
+theme(axis.text.y = element_text(size=14),
+axis.text.x = element_text(size=14),
+axis.title.y  = element_text(size=14),
+axis.title.x  = element_text(size=14),
+panel.background = element_blank(),
+panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(),
+panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"))+
+grids(linetype = "dashed")
+dev.off()
+```
+
+#GSEA bubble plots: Import GSEA resuts first
+```{r}
+# Predicted celltype L1 (low resolution celltype annotatation)
+temp <- tempfile(fileext = ".rds")
+dl <- drive_download(
+  as_id("10JLrK_IhsTTFhdPuN9OPo18eM6AZ0ffM"), path = temp, overwrite = TRUE)
+gsea_celltypel1 <- readRDS(file = dl$local_path)
+
+# Predicted celltype L2 (High resolution celltype annotatation)
+temp <- tempfile(fileext = ".rds")
+dl <- drive_download(
+  as_id("10JEvOfkJwHHbYqbtolgOQ8oET0kLhbb9"), path = temp, overwrite = TRUE)
+gsea_celltypel2 <- readRDS(file = dl$local_path)
+```
+
+# Select top significant pathways in each colelction and plot seperately
+```{r}
+# Predicted celltype L2
+#Remove CD4CTL
+gsea_celltypel2<-rlist::list.remove(gsea_celltypel2,"gsea_l2_cd4_ctl")
+signif_pathways_celltpyel2_list<-imap(gsea_celltypel2, ~.x %>%
+                                         filter(., neglogpadj>1.30103)%>%
+                                  filter(., !grepl("MSigDB_C7_all_v7.4|MSigDB_C8_all_v7.4|lowBTMs|highBTMs|BloodGen3Module|MonacoModules", module_type)))
+
+signif_pathways_celltpyel2<-bind_rows(signif_pathways_celltpyel2_list, .id = "celltype")
+
+signif_pathways_celltpyel2<-signif_pathways_celltpyel2 %>%
+    mutate_at("celltype",str_replace,"gsea_l2_", "") %>%
+    mutate_at("celltype", toupper)
+
+# Plotting only C5 collections
+
+signif_c5bp_celltpyel2<-imap(signif_pathways_celltpyel2_list, ~.x %>%
+                             filter(., neglogpadj>3)%>%
+                                         filter(., grepl("MSigDB_C5_GO_bp", module_type)))
+
+signif_c5bp_celltpyel2<-bind_rows(signif_c5bp_celltpyel2, .id = "celltype")
+
+signif_c5bp_celltpyel2<-signif_c5bp_celltpyel2 %>%
+    mutate_at("celltype",str_replace,"gsea_l2_", "") %>%
+    mutate_at("celltype", toupper)
+
+```
+
+# Plot as bubble plot
+```{r plot bubble plots, message=F, warning=F, results=T}
+basetextsize <- 8
+myfont <- "sans"
+bubble_max_size <- 6
+# The comparison is Apara vs para, so we're plotting -NES
+
+signif_plot_pred.celltpyel2<-ggplot(signif_pathways_celltpyel2, aes(x = pathway, y=celltype)) +
+                  geom_point(aes(size=neglogpadj, color=-NES), alpha = 0.65) +
+                  scale_size_area(name = expression(-log[10]~adj.~p~value), max_size = bubble_max_size) +
+                  scale_color_gradient2(low = "blue",
+                                        mid = "white",
+                                        high = "red",
+                                        name = "Aparasitemic vs Parasitemic 5% cut off") +
+                  hrbrthemes::theme_ipsum_es(base_family = myfont, base_size = basetextsize) +
+                  theme(axis.title.x = element_blank(),
+                        axis.title.y = element_blank(),
+                        strip.background = element_blank(),
+                        legend.position = "bottom",
+                        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+  facet_wrap(~module_type, scales = "free")
+
+# Plotting C5 collections only
+signif_c5bp_plot_pred.celltpyel2<-ggplot(signif_c5bp_celltpyel2, aes(x = pathway, y=celltype)) +
+                  geom_point(aes(size=neglogpadj, color=-NES), alpha = 0.65) +
+                  scale_size_area(name = expression(-log[10]~adj.~p~value), max_size = bubble_max_size) +
+                  scale_color_gradient2(low = "blue",
+                                        mid = "white",
+                                        high = "red",
+                                        name = "Aparasitemic vs Parasitemic-C5 pathways 0.1% cut off") +
+                  hrbrthemes::theme_ipsum_es(base_family = myfont, base_size = basetextsize) +
+                  theme(axis.title.x = element_blank(),
+                        axis.title.y = element_blank(),
+                        strip.background = element_blank(),
+                        legend.position = "bottom",
+                        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+  facet_wrap(~module_type, scales = "free")
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_GSEA_5_pctcutoffglobal_04272023.pdf", height=15, width=9)
+signif_plot_pred.celltpyel2
+dev.off()
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_GSEA_C5bp_04272023.pdf", height=8, width=9)
+signif_c5bp_plot_pred.celltpyel2
+dev.off()
+```
+
+Create GEX matrices for export for signature scoring
+```{r}
+#Aara
+DefaultAssay(all_apara)<-"RNA"
+all_apara_mat<-t(as.matrix(GetAssayData(all_apara)))
+write.table(all_apara_mat, "~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/data/all_exvivo_pools_reclustered_all_apara_refmap_mat.tsv", sep="\t", row.names = TRUE, col.names=NA)
+#Para
+DefaultAssay(all_para)<-"RNA"
+all_para_mat<-t(as.matrix(GetAssayData(all_para)))
+write.table(all_para_mat, "~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/data/all_exvivo_pools_reclustered_all_para_refmap_mat.tsv", sep="\t", row.names = TRUE, col.names=NA)
+
+DefaultAssay(refmapped.all)<-"RNA"
+refmapped.all_mat<-t(as.matrix(GetAssayData(refmapped.all)))
+write.table(refmapped.all_mat, "~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/data/all_exvivo_pools_reclustered_refmapped.all_refmap_mat.tsv", sep="\t", row.names = TRUE, col.names=NA)
+
+```
+
+#Import for plot
+```{r}
+setwd("~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/results")
+apara_scores<-readr::read_tsv("Hallmark_all_exvivo_pools_reclustered_all_apara_refmap_mat.tsv")
+
+apara_data<-FetchData(all_apara ,c(  "refUMAP_1", "refUMAP_2"))
+apara_data<-apara_data%>%rownames_to_column(., "id")
+apara_all<-merge(apara_scores, apara_data, by="id")
+
+# make contour plots
+calcMax <- function(input){
+  value = max( input)
+  min = min(input)
+  max = 1.3 * value
+  if (value <= 0) {
+    max = 0.3 * (value - min) + value
+  }
+  # print(paste("value = ", value))
+  # print(paste("min = ", min))
+  # print(paste("max = ", max))
+  return( c(value, min, max))
+}
+
+arrondi <- function (x) ifelse(x>0, ifelse(x-trunc(x)>=0.5,trunc(x)+1,trunc(x)), ifelse(x-trunc(x)<=-0.5,trunc(x)-1,trunc(x)))
+
+criteriaX<-"refUMAP_1"
+criteriaY<-"refUMAP_2"
+
+############################################################################################################################################
+# Naive
+
+scaleval = calcMax(apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+valuev = scaleval[1]
+min_expression = scaleval[2]
+med_expression=((valuev-min_expression)/1.5)+min_expression
+
+if (med_expression > valuev){
+  med_expression <- valuev # when slider color value is not updated before density slider, the med_expression of previous computation is used and med_expression can be > maxv
+} else if (med_expression < min_expression) {
+  med_expression <- min_expression
+}
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+max_expression=max(apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+min_expression=min(apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+
+
+max_refUMAPX=arrondi(max(apara_all$refUMAP_1))+1
+min_refUMAPX=arrondi(min(apara_all$refUMAP_1))-1
+max_refUMAPY=arrondi(max(apara_all$refUMAP_2))+1
+min_refUMAPY=arrondi(min(apara_all$refUMAP_2))-1
+
+p_tnfa_apara<-ggplot(apara_all, aes(x = apara_all$refUMAP_1, y = apara_all$refUMAP_2)) +
+  #stat_density_2d(aes(fill=..level..,alpha=..level..), geom='polygon', colour='grey', n=9) +
+  geom_jitter(aes(x = apara_all$refUMAP_1, y = apara_all$refUMAP_2, color = apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`), size=0.1, alpha=0.7) +
+  labs(color = "color scale") + # color legend
+  scale_colour_gradientn(colours = jet.colors(10), limits=c(min_expression, max_expression)) +
+  xlab(criteriaX) +
+ # theme_bw() +
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +  # remove grid
+  scale_alpha_continuous(range=c(0.1,0.5))+
+  scale_x_continuous(limits = c(min_refUMAPX, max_refUMAPX))+
+  scale_y_continuous(limits = c(min_refUMAPY, max_refUMAPY))+
+  theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+###############################################################################
+setwd("~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/results")
+para_scores<-readr::read_tsv("Hallmark_all_exvivo_pools_reclustered_all_para_refmap_mat.tsv")
+
+para_data<-FetchData(all_para ,c(  "refUMAP_1", "refUMAP_2"))
+para_data<-para_data%>%rownames_to_column(., "id")
+para_all<-merge(para_scores, para_data, by="id")
+
+# make contour plots
+calcMax <- function(input){
+  value = max( input)
+  min = min(input)
+  max = 1.3 * value
+  if (value <= 0) {
+    max = 0.3 * (value - min) + value
+  }
+  # print(paste("value = ", value))
+  # print(paste("min = ", min))
+  # print(paste("max = ", max))
+  return( c(value, min, max))
+}
+
+arrondi <- function (x) ifelse(x>0, ifelse(x-trunc(x)>=0.5,trunc(x)+1,trunc(x)), ifelse(x-trunc(x)<=-0.5,trunc(x)-1,trunc(x)))
+
+criteriaX<-"refUMAP_1"
+criteriaY<-"refUMAP_2"
+
+############################################################################################################################################
+# Naive
+
+scaleval = calcMax(para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+valuev = scaleval[1]
+min_expression = scaleval[2]
+med_expression=((valuev-min_expression)/1.5)+min_expression
+
+if (med_expression > valuev){
+  med_expression <- valuev # when slider color value is not updated before density slider, the med_expression of previous computation is used and med_expression can be > maxv
+} else if (med_expression < min_expression) {
+  med_expression <- min_expression
+}
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+max_expression=max(para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+min_expression=min(para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+
+
+max_refUMAPX=arrondi(max(para_all$refUMAP_1))+1
+min_refUMAPX=arrondi(min(para_all$refUMAP_1))-1
+max_refUMAPY=arrondi(max(para_all$refUMAP_2))+1
+min_refUMAPY=arrondi(min(para_all$refUMAP_2))-1
+
+p_tnfa_para<-ggplot(para_all, aes(x = para_all$refUMAP_1, y = para_all$refUMAP_2)) +
+  #stat_density_2d(aes(fill=..level..,alpha=..level..), geom='polygon', colour='grey', n=9) +
+  geom_jitter(aes(x = para_all$refUMAP_1, y = para_all$refUMAP_2, color = para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`), size=0.1, alpha=0.7) +
+  labs(color = "color scale") + # color legend
+  scale_colour_gradientn(colours = jet.colors(10), limits=c(min_expression, max_expression)) +
+  xlab(criteriaX) +
+  # theme_bw() +
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +  # remove grid
+  scale_alpha_continuous(range=c(0.1,0.5))+
+  scale_x_continuous(limits = c(min_refUMAPX, max_refUMAPX))+
+  scale_y_continuous(limits = c(min_refUMAPY, max_refUMAPY))+
+  theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_HallmarkTNF_Apara_04272023.pdf", height=5, width=5)
+p_tnfa_apara
+dev.off()
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_Exvivo_HallmarkTNF_Ppara_04272023.pdf", height=5, width=5)
+p_tnfa_para
+dev.off()
+```
+
+```{r}
+setwd("~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/results")
+apara_scores<-readr::read_tsv("Hallmark_all_exvivo_pools_reclustered_all_apara_refmap_mat.tsv")
+
+apara_data<-FetchData(all_apara ,c(  "refUMAP_1", "refUMAP_2"))
+apara_data<-apara_data%>%rownames_to_column(., "id")
+apara_all<-merge(apara_scores, apara_data, by="id")
+
+# make contour plots
+calcMax <- function(input){
+  value = max( input)
+  min = min(input)
+  max = 1.3 * value
+  if (value <= 0) {
+    max = 0.3 * (value - min) + value
+  }
+  # print(paste("value = ", value))
+  # print(paste("min = ", min))
+  # print(paste("max = ", max))
+  return( c(value, min, max))
+}
+
+arrondi <- function (x) ifelse(x>0, ifelse(x-trunc(x)>=0.5,trunc(x)+1,trunc(x)), ifelse(x-trunc(x)<=-0.5,trunc(x)-1,trunc(x)))
+
+criteriaX<-"refUMAP_1"
+criteriaY<-"refUMAP_2"
+
+############################################################################################################################################
+# Naive
+
+scaleval = calcMax(apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+valuev = scaleval[1]
+min_expression = scaleval[2]
+med_expression=((valuev-min_expression)/1.5)+min_expression
+
+if (med_expression > valuev){
+  med_expression <- valuev # when slider color value is not updated before density slider, the med_expression of previous computation is used and med_expression can be > maxv
+} else if (med_expression < min_expression) {
+  med_expression <- min_expression
+}
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+max_expression=max(apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+min_expression=min(apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+
+
+max_refUMAPX=arrondi(max(apara_all$refUMAP_1))+1
+min_refUMAPX=arrondi(min(apara_all$refUMAP_1))-1
+max_refUMAPY=arrondi(max(apara_all$refUMAP_2))+1
+min_refUMAPY=arrondi(min(apara_all$refUMAP_2))-1
+
+p_tnfa_apara<-ggplot(apara_all, aes(x = apara_all$refUMAP_1, y = apara_all$refUMAP_2)) +
+  #stat_density_2d(aes(fill=..level..,alpha=..level..), geom='polygon', colour='grey', n=9) +
+  geom_jitter(aes(x = apara_all$refUMAP_1, y = apara_all$refUMAP_2, color = apara_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`), size=0.1, alpha=0.7) +
+  labs(color = "color scale") + # color legend
+  scale_colour_gradientn(colours = jet.colors(10), limits=c(min_expression, max_expression)) +
+  xlab(criteriaX) +
+ # theme_bw() +
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +  # remove grid
+  scale_alpha_continuous(range=c(0.1,0.5))+
+  scale_x_continuous(limits = c(min_refUMAPX, max_refUMAPX))+
+  scale_y_continuous(limits = c(min_refUMAPY, max_refUMAPY))+
+  theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+###############################################################################
+setwd("~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/results")
+para_scores<-readr::read_tsv("Hallmark_all_exvivo_pools_reclustered_all_para_refmap_mat.tsv")
+
+para_data<-FetchData(all_para ,c(  "refUMAP_1", "refUMAP_2"))
+para_data<-para_data%>%rownames_to_column(., "id")
+para_all<-merge(para_scores, para_data, by="id")
+
+# make contour plots
+calcMax <- function(input){
+  value = max( input)
+  min = min(input)
+  max = 1.3 * value
+  if (value <= 0) {
+    max = 0.3 * (value - min) + value
+  }
+  # print(paste("value = ", value))
+  # print(paste("min = ", min))
+  # print(paste("max = ", max))
+  return( c(value, min, max))
+}
+
+arrondi <- function (x) ifelse(x>0, ifelse(x-trunc(x)>=0.5,trunc(x)+1,trunc(x)), ifelse(x-trunc(x)<=-0.5,trunc(x)-1,trunc(x)))
+
+criteriaX<-"refUMAP_1"
+criteriaY<-"refUMAP_2"
+
+############################################################################################################################################
+# Naive
+
+scaleval = calcMax(para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+valuev = scaleval[1]
+min_expression = scaleval[2]
+med_expression=((valuev-min_expression)/1.5)+min_expression
+
+if (med_expression > valuev){
+  med_expression <- valuev # when slider color value is not updated before density slider, the med_expression of previous computation is used and med_expression can be > maxv
+} else if (med_expression < min_expression) {
+  med_expression <- min_expression
+}
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+max_expression=max(para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+min_expression=min(para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+
+
+max_refUMAPX=arrondi(max(para_all$refUMAP_1))+1
+min_refUMAPX=arrondi(min(para_all$refUMAP_1))-1
+max_refUMAPY=arrondi(max(para_all$refUMAP_2))+1
+min_refUMAPY=arrondi(min(para_all$refUMAP_2))-1
+
+p_tnfa_para<-ggplot(para_all, aes(x = para_all$refUMAP_1, y = para_all$refUMAP_2)) +
+  #stat_density_2d(aes(fill=..level..,alpha=..level..), geom='polygon', colour='grey', n=9) +
+  geom_jitter(aes(x = para_all$refUMAP_1, y = para_all$refUMAP_2, color = para_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`), size=0.1, alpha=0.7) +
+  labs(color = "color scale") + # color legend
+  scale_colour_gradientn(colours = jet.colors(10), limits=c(min_expression, max_expression)) +
+  xlab(criteriaX) +
+  # theme_bw() +
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +  # remove grid
+  scale_alpha_continuous(range=c(0.1,0.5))+
+  scale_x_continuous(limits = c(min_refUMAPX, max_refUMAPX))+
+  scale_y_continuous(limits = c(min_refUMAPY, max_refUMAPY))+
+  theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_HallmarkTNF_Apara_04272023.pdf", height=5, width=5)
+p_tnfa_apara
+dev.off()
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_Exvivo_HallmarkTNF_Ppara_04272023.pdf", height=5, width=5)
+p_tnfa_para
+dev.off()
+```
+
+```{r}
+setwd("~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/results")
+all_scores<-readr::read_tsv("Hallmark_all_exvivo_pools_reclustered_refmapped.all_refmap_mat.tsv")
+
+all_data<-FetchData(refmapped.all ,c(  "refUMAP_1", "refUMAP_2"))
+all_data<-all_data%>%rownames_to_column(., "id")
+all_all<-merge(all_scores, all_data, by="id")
+
+# make contour plots
+calcMax <- function(input){
+  value = max( input)
+  min = min(input)
+  max = 1.3 * value
+  if (value <= 0) {
+    max = 0.3 * (value - min) + value
+  }
+  # print(paste("value = ", value))
+  # print(paste("min = ", min))
+  # print(paste("max = ", max))
+  return( c(value, min, max))
+}
+
+arrondi <- function (x) ifelse(x>0, ifelse(x-trunc(x)>=0.5,trunc(x)+1,trunc(x)), ifelse(x-trunc(x)<=-0.5,trunc(x)-1,trunc(x)))
+
+criteriaX<-"refUMAP_1"
+criteriaY<-"refUMAP_2"
+
+############################################################################################################################################
+# Naive
+
+scaleval = calcMax(all_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+valuev = scaleval[1]
+min_expression = scaleval[2]
+med_expression=((valuev-min_expression)/1.5)+min_expression
+
+if (med_expression > valuev){
+  med_expression <- valuev # when slider color value is not updated before density slider, the med_expression of previous computation is used and med_expression can be > maxv
+} else if (med_expression < min_expression) {
+  med_expression <- min_expression
+}
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+max_expression=max(all_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+min_expression=min(all_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`)
+
+
+max_refUMAPX=arrondi(max(all_all$refUMAP_1))+1
+min_refUMAPX=arrondi(min(all_all$refUMAP_1))-1
+max_refUMAPY=arrondi(max(all_all$refUMAP_2))+1
+min_refUMAPY=arrondi(min(all_all$refUMAP_2))-1
+
+p_tnfa_all<-ggplot(all_all, aes(x = all_all$refUMAP_1, y = all_all$refUMAP_2)) +
+  #stat_density_2d(aes(fill=..level..,alpha=..level..), geom='polygon', colour='grey', n=9) +
+  geom_jitter(aes(x = all_all$refUMAP_1, y = all_all$refUMAP_2, color = all_all$`HALLMARK_TNFA_SIGNALING_VIA_NFKB-hallmark`), size=0.1, alpha=0.7) +
+  labs(color = "color scale") + # color legend
+  scale_colour_gradientn(colours = jet.colors(10), limits=c(min_expression, max_expression)) +
+  xlab(criteriaX) +
+  # theme_bw() +
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +  # remove grid
+  scale_alpha_continuous(range=c(0.1,0.5))+
+  scale_x_continuous(limits = c(min_refUMAPX, max_refUMAPX))+
+  scale_y_continuous(limits = c(min_refUMAPY, max_refUMAPY))+
+  theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_HallmarkTNF_All_04272023.pdf", height=5, width=5)
+p_tnfa_all
+dev.off()
+
+
+
+setwd("~/Downloads/SingleCellSignatureExplorer_20220112/SingleCellSignatureScorer/results")
+all_scores<-readr::read_tsv("C2_KEGG_all_exvivo_pools_reclustered_refmapped.all_refmap_mat.tsv")
+
+all_data<-FetchData(refmapped.all ,c(  "refUMAP_1", "refUMAP_2"))
+all_data<-all_data%>%rownames_to_column(., "id")
+all_all<-merge(all_scores, all_data, by="id")
+
+# make contour plots
+calcMax <- function(input){
+  value = max( input)
+  min = min(input)
+  max = 1.3 * value
+  if (value <= 0) {
+    max = 0.3 * (value - min) + value
+  }
+  # print(paste("value = ", value))
+  # print(paste("min = ", min))
+  # print(paste("max = ", max))
+  return( c(value, min, max))
+}
+
+arrondi <- function (x) ifelse(x>0, ifelse(x-trunc(x)>=0.5,trunc(x)+1,trunc(x)), ifelse(x-trunc(x)<=-0.5,trunc(x)-1,trunc(x)))
+
+criteriaX<-"refUMAP_1"
+criteriaY<-"refUMAP_2"
+
+############################################################################################################################################
+# Naive
+
+scaleval = calcMax(all_all$`KEGG_RIG_I_LIKE_RECEPTOR_SIGNALING_PATHWAY-C2_KEGG_coll`)
+valuev = scaleval[1]
+min_expression = scaleval[2]
+med_expression=((valuev-min_expression)/1.5)+min_expression
+
+if (med_expression > valuev){
+  med_expression <- valuev # when slider color value is not updated before density slider, the med_expression of previous computation is used and med_expression can be > maxv
+} else if (med_expression < min_expression) {
+  med_expression <- min_expression
+}
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+max_expression=max(all_all$`KEGG_RIG_I_LIKE_RECEPTOR_SIGNALING_PATHWAY-C2_KEGG_coll`)
+min_expression=min(all_all$`KEGG_RIG_I_LIKE_RECEPTOR_SIGNALING_PATHWAY-C2_KEGG_coll`)
+
+
+max_refUMAPX=arrondi(max(all_all$refUMAP_1))+1
+min_refUMAPX=arrondi(min(all_all$refUMAP_1))-1
+max_refUMAPY=arrondi(max(all_all$refUMAP_2))+1
+min_refUMAPY=arrondi(min(all_all$refUMAP_2))-1
+
+p_Kegg_rigi_all<-ggplot(all_all, aes(x = all_all$refUMAP_1, y = all_all$refUMAP_2)) +
+  #stat_density_2d(aes(fill=..level..,alpha=..level..), geom='polygon', colour='grey', n=9) +
+  geom_jitter(aes(x = all_all$refUMAP_1, y = all_all$refUMAP_2, color = all_all$`KEGG_RIG_I_LIKE_RECEPTOR_SIGNALING_PATHWAY-C2_KEGG_coll`), size=0.1, alpha=0.7) +
+  labs(color = "color scale") + # color legend
+  scale_colour_gradientn(colours = jet.colors(10), limits=c(min_expression, max_expression)) +
+  xlab(criteriaX) +
+  # theme_bw() +
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +  # remove grid
+  scale_alpha_continuous(range=c(0.1,0.5))+
+  scale_x_continuous(limits = c(min_refUMAPX, max_refUMAPX))+
+  scale_y_continuous(limits = c(min_refUMAPY, max_refUMAPY))+
+  theme(axis.text.y = element_text(size=14),
+        axis.text.x = element_text(size=14),
+        axis.title.y  = element_text(size=14),
+        axis.title.x  = element_text(size=14),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "darkgrey", fill=NA, size=1),
+        plot.margin=unit(c(0.01,0.01,0.01,0.01), "null"),
+        legend.position = "none") &
+  grids(linetype = "dashed")
+
+
+pdf("/Users/rholla/Desktop/R21 Sterile Immunity data and scripts/All scRNA-seq GEX consolidated (CITE-exvivo and multiome)/All15samples_Exvivo_Kegg_rigi_ALL_04272023.pdf", height=5, width=5)
+p_Kegg_rigi_all
+dev.off()
+
+```
+
